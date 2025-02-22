@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en" data-bs-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Space Combat Simulator</title>
+    <link rel="stylesheet" href="https://cdn.replit.com/agent/bootstrap-agent-dark-theme.min.css">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <div class="container-fluid">
+        <div class="row my-3">
+            <div class="col-md-9">
+                <canvas id="gameCanvas"></canvas>
+            </div>
+            <div class="col-md-3">
+                <div class="card">
+                    <div class="card-body">
+                        <h5 class="card-title">Ship Status</h5>
+                        <div class="mb-3">
+                            <label>Hull Integrity</label>
+                            <div class="progress">
+                                <div id="hullBar" class="progress-bar bg-danger" style="width: 100%"></div>
+                            </div>
+                        </div>
+                        <div class="mb-3">
+                            <label>Shield Power</label>
+                            <div class="progress">
+                                <div id="shieldBar" class="progress-bar bg-info" style="width: 100%"></div>
+                            </div>
+                        </div>
+                        <div class="mb-3">
+                            <label>Weapon System</label>
+                            <div class="btn-group w-100">
+                                <button id="laserBtn" class="btn btn-secondary active">Lasers</button>
+                                <button id="torpedoBtn" class="btn btn-secondary">Torpedoes</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="{{ url_for('static', filename='js/physics.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/ships.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/weapons.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/ai.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/game.js') }}"></script>
+</body>
+</html>
