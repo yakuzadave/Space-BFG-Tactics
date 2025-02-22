@@ -8,6 +8,7 @@ class Game {
         this.currentPhase = 'movement'; // movement, shooting, end
         this.currentPlayer = 'player'; // player or ai
         this.selectedShip = null;
+        this.combatLog = document.getElementById('combatLog');
 
         this.player = new Ship(this.gridSize * 5, this.gridSize * 5, true);
         this.enemies = [
@@ -24,6 +25,15 @@ class Game {
         this.setupEventListeners();
         this.drawGrid();
         this.updateUI();
+        this.logMessage('system', 'Combat engagement initiated. Standing by for orders.');
+    }
+
+    logMessage(type, message) {
+        const entry = document.createElement('div');
+        entry.className = type;
+        entry.textContent = `> ${message}`;
+        this.combatLog.appendChild(entry);
+        this.combatLog.scrollTop = this.combatLog.scrollHeight;
     }
 
     resizeCanvas() {
@@ -45,9 +55,11 @@ class Game {
 
         document.getElementById('laserBtn').addEventListener('click', () => {
             this.selectedWeapon = this.weapons[Weapon.LASER];
+            this.logMessage('system', 'Macro batteries armed and ready.');
         });
         document.getElementById('torpedoBtn').addEventListener('click', () => {
             this.selectedWeapon = this.weapons[Weapon.TORPEDO];
+            this.logMessage('system', 'Torpedo tubes loaded and ready to fire.');
         });
     }
 
@@ -63,10 +75,14 @@ class Game {
 
             if (clickedShip && clickedShip.isPlayer && this.currentPlayer === 'player') {
                 this.selectedShip = clickedShip;
+                this.logMessage('system', 'Ship selected. Awaiting movement orders.');
             } else if (this.selectedShip && this.isValidMove(gridX, gridY)) {
+                const oldX = this.selectedShip.x;
+                const oldY = this.selectedShip.y;
                 this.selectedShip.x = gridX;
                 this.selectedShip.y = gridY;
                 this.selectedShip = null;
+                this.logMessage('system', `Ship moved from grid (${Math.floor(oldX/this.gridSize)},${Math.floor(oldY/this.gridSize)}) to (${Math.floor(gridX/this.gridSize)},${Math.floor(gridY/this.gridSize)})`);
             }
         } else if (this.currentPhase === 'shooting') {
             // Handle targeting
@@ -96,23 +112,42 @@ class Game {
     }
 
     resolveAttack(attacker, target, weapon) {
+        const oldShield = target.shield;
+        const oldHull = target.hull;
         target.damage(weapon.damage);
+
+        if (oldShield > 0) {
+            this.logMessage('shield', 
+                `${weapon.type === Weapon.LASER ? 'Macro batteries' : 'Torpedo'} hit enemy shields! ` +
+                `Shield strength reduced from ${oldShield.toFixed(0)}% to ${target.shield.toFixed(0)}%`
+            );
+        } else {
+            this.logMessage('hit',
+                `Direct hit on enemy hull! ` +
+                `Hull integrity reduced from ${oldHull.toFixed(0)}% to ${target.hull.toFixed(0)}%`
+            );
+        }
+
         if (target.hull <= 0) {
             this.enemies = this.enemies.filter(e => e !== target);
+            this.logMessage('hit', 'Enemy vessel destroyed!');
         }
     }
 
     endPhase() {
         if (this.currentPhase === 'movement') {
             this.currentPhase = 'shooting';
+            this.logMessage('system', 'Movement phase complete. Entering shooting phase.');
         } else if (this.currentPhase === 'shooting') {
             if (this.currentPlayer === 'player') {
                 this.currentPlayer = 'ai';
                 this.currentPhase = 'movement';
+                this.logMessage('system', 'Enemy turn beginning.');
                 this.aiTurn();
             } else {
                 this.currentPlayer = 'player';
                 this.currentPhase = 'movement';
+                this.logMessage('system', 'Your turn, commander.');
             }
         }
         this.selectedShip = null;
@@ -125,11 +160,19 @@ class Game {
             // Move closer to player
             const dx = this.player.x - enemy.x;
             const dy = this.player.y - enemy.y;
+            const oldX = enemy.x;
+            const oldY = enemy.y;
             enemy.x += Math.sign(dx) * this.gridSize;
             enemy.y += Math.sign(dy) * this.gridSize;
 
+            this.logMessage('system', 
+                `Enemy vessel moved from grid (${Math.floor(oldX/this.gridSize)},${Math.floor(oldY/this.gridSize)}) ` +
+                `to (${Math.floor(enemy.x/this.gridSize)},${Math.floor(enemy.y/this.gridSize)})`
+            );
+
             // Shoot if in range
             if (this.isInRange(enemy, this.player, this.weapons[Weapon.LASER].range)) {
+                this.logMessage('system', 'Enemy vessel opening fire!');
                 this.resolveAttack(enemy, this.player, this.weapons[Weapon.LASER]);
             }
         });

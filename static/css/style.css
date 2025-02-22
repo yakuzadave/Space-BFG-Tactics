@@ -19,3 +19,25 @@ body {
     height: 20px;
     background-color: var(--bs-dark);
 }
+
+.combat-log {
+    height: 200px;
+    overflow-y: auto;
+    font-family: monospace;
+    font-size: 0.9em;
+    padding: 10px;
+    background-color: rgba(0, 0, 0, 0.2);
+    border-radius: 4px;
+}
+
+.combat-log .hit {
+    color: var(--bs-danger);
+}
+
+.combat-log .shield {
+    color: var(--bs-info);
+}
+
+.combat-log .system {
+    color: var(--bs-secondary);
+}
