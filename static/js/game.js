@@ -5,20 +5,24 @@ class Game {
         this.resizeCanvas();
 
         this.gridSize = 50; // Size of each grid cell
-        this.currentPhase = 'movement'; // movement, shooting, end
-        this.currentPlayer = 'player'; // player or ai
+        // Additional phases: movement, shooting, critical, boarding, end
+        this.phases = ['movement', 'shooting', 'critical', 'boarding'];
+        this.currentPhaseIndex = 0; // Start at movement
+        this.currentPlayer = 'player'; // 'player' or 'ai'
         this.selectedShip = null;
         this.combatLog = document.getElementById('combatLog');
 
+        // Initialize ships with extra stats for critical hit chances, armor, etc.
         this.player = new Ship(this.gridSize * 5, this.gridSize * 5, true);
         this.enemies = [
             new Ship(this.gridSize * 2, this.gridSize * 2),
             new Ship(this.gridSize * 8, this.gridSize * 2)
         ];
 
+        // Define weapons with extended properties: damage, range, accuracy modifier, critical chance
         this.weapons = {
-            [Weapon.LASER]: new Weapon(Weapon.LASER, 10, 6, 8), // range in grid cells
-            [Weapon.TORPEDO]: new Weapon(Weapon.TORPEDO, 25, 4, 12)
+            [Weapon.LASER]: new Weapon(Weapon.LASER, 10, 6, 8, 0.1), // 10 damage, 6 cost, 8 grid range, 10% crit chance
+            [Weapon.TORPEDO]: new Weapon(Weapon.TORPEDO, 25, 4, 12, 0.2)
         };
         this.selectedWeapon = this.weapons[Weapon.LASER];
 
@@ -77,9 +81,7 @@ class Game {
             this.saveShipCustomization(modal);
         });
 
-        // Update preview when customization changes
         const updatePreview = () => this.updateShipPreview(previewCtx, previewCanvas.width, previewCanvas.height);
-
         document.getElementById('shipColorPicker').addEventListener('input', updatePreview);
         document.getElementById('hullType').addEventListener('change', updatePreview);
         document.getElementById('shieldCapacity').addEventListener('input', updatePreview);
@@ -92,7 +94,7 @@ class Game {
         const gridX = Math.floor(x / this.gridSize) * this.gridSize;
         const gridY = Math.floor(y / this.gridSize) * this.gridSize;
 
-        if (this.currentPhase === 'movement') {
+        if (this.currentPhase() === 'movement') {
             // Handle ship selection and movement
             const clickedShip = [this.player, ...this.enemies].find(ship =>
                 Math.abs(ship.x - x) < this.gridSize && Math.abs(ship.y - y) < this.gridSize
@@ -106,10 +108,10 @@ class Game {
                 const oldY = this.selectedShip.y;
                 this.selectedShip.x = gridX;
                 this.selectedShip.y = gridY;
+                this.logMessage('system', `Ship moved from (${oldX / this.gridSize},${oldY / this.gridSize}) to (${gridX / this.gridSize},${gridY / this.gridSize}).`);
                 this.selectedShip = null;
-                this.logMessage('system', `Ship moved from grid (${Math.floor(oldX / this.gridSize)},${Math.floor(oldY / this.gridSize)}) to (${Math.floor(gridX / this.gridSize)},${Math.floor(gridY / this.gridSize)})`);
             }
-        } else if (this.currentPhase === 'shooting') {
+        } else if (this.currentPhase() === 'shooting') {
             // Handle targeting
             const target = this.enemies.find(enemy =>
                 Math.abs(enemy.x - x) < this.gridSize && Math.abs(enemy.y - y) < this.gridSize
@@ -117,10 +119,18 @@ class Game {
             if (target && this.isInRange(this.player, target, this.selectedWeapon.range)) {
                 this.resolveAttack(this.player, target, this.selectedWeapon);
             }
+        } else if (this.currentPhase() === 'critical') {
+            // Optionally, handle critical damage resolution clicks
+            this.resolveCritical();
         }
+        // Other phases (like boarding) could be handled here
 
         this.draw();
         this.updateUI();
+    }
+
+    currentPhase() {
+        return this.phases[this.currentPhaseIndex];
     }
 
     isValidMove(x, y) {
@@ -137,19 +147,27 @@ class Game {
     }
 
     resolveAttack(attacker, target, weapon) {
+        // Expand damage resolution to include armor vs. shield effects
         const oldShield = target.shield;
         const oldHull = target.hull;
+        // Call damage method on target (which might consider armor, shields, and random crits)
         target.damage(weapon.damage);
 
-        if (oldShield > 0) {
+        // Determine if a critical hit occurred
+        if (Math.random() < weapon.critChance) {
+            this.logMessage('critical', `Critical hit by ${weapon.type}! Systems may be impaired.`);
+            target.applyCriticalHit(); // Method to handle disabling or degrading systems
+        }
+
+        if (oldShield > 0 && target.shield < oldShield) {
             this.logMessage('shield',
                 `${weapon.type === Weapon.LASER ? 'Macro batteries' : 'Torpedo'} hit enemy shields! ` +
-                `Shield strength reduced from ${oldShield.toFixed(0)}% to ${target.shield.toFixed(0)}%`
+                `Shield reduced from ${oldShield.toFixed(0)}% to ${target.shield.toFixed(0)}%.`
             );
         } else {
             this.logMessage('hit',
                 `Direct hit on enemy hull! ` +
-                `Hull integrity reduced from ${oldHull.toFixed(0)}% to ${target.hull.toFixed(0)}%`
+                `Hull integrity reduced from ${oldHull.toFixed(0)}% to ${target.hull.toFixed(0)}%.`
             );
         }
 
@@ -159,56 +177,57 @@ class Game {
         }
     }
 
+    // New method for resolving critical effects (could be expanded to a mini-game or dice roll system)
+    resolveCritical() {
+        // For now, we simply log that the critical phase is being resolved.
+        this.logMessage('critical', 'Resolving critical system damage...');
+        // Implement further logic here.
+        this.endPhase(); // End critical phase after resolving
+    }
+
     endPhase() {
-        if (this.currentPhase === 'movement') {
-            this.currentPhase = 'shooting';
-            this.logMessage('system', 'Movement phase complete. Entering shooting phase.');
-        } else if (this.currentPhase === 'shooting') {
-            if (this.currentPlayer === 'player') {
-                this.currentPlayer = 'ai';
-                this.currentPhase = 'movement';
-                this.logMessage('system', 'Enemy turn beginning.');
+        // Cycle through phases. For simplicity, we'll cycle back to movement.
+        this.currentPhaseIndex = (this.currentPhaseIndex + 1) % this.phases.length;
+
+        // If phase returns to movement and it was AI's turn, swap players.
+        if (this.currentPhase() === 'movement') {
+            this.currentPlayer = this.currentPlayer === 'player' ? 'ai' : 'player';
+            this.logMessage('system', `${this.currentPlayer === 'player' ? 'Your turn, commander.' : 'Enemy turn beginning.'}`);
+            if (this.currentPlayer === 'ai') {
                 this.aiTurn();
-            } else {
-                this.currentPlayer = 'player';
-                this.currentPhase = 'movement';
-                this.logMessage('system', 'Your turn, commander.');
             }
+        } else {
+            this.logMessage('system', `Entering ${this.currentPhase()} phase.`);
         }
+
         this.selectedShip = null;
         this.updateUI();
     }
 
     aiTurn() {
-        // Simple AI: Move towards player and shoot if in range
+        // Simple AI: move toward the player, then shoot if in range.
         this.enemies.forEach(enemy => {
-            // Move closer to player
             const dx = this.player.x - enemy.x;
             const dy = this.player.y - enemy.y;
             const oldX = enemy.x;
             const oldY = enemy.y;
             enemy.x += Math.sign(dx) * this.gridSize;
             enemy.y += Math.sign(dy) * this.gridSize;
-
             this.logMessage('system',
-                `Enemy vessel moved from grid (${Math.floor(oldX / this.gridSize)},${Math.floor(oldY / this.gridSize)}) ` +
-                `to (${Math.floor(enemy.x / this.gridSize)},${Math.floor(enemy.y / this.gridSize)})`
+                `Enemy moved from (${oldX / this.gridSize},${oldY / this.gridSize}) to (${enemy.x / this.gridSize},${enemy.y / this.gridSize}).`
             );
-
-            // Shoot if in range
             if (this.isInRange(enemy, this.player, this.weapons[Weapon.LASER].range)) {
                 this.logMessage('system', 'Enemy vessel opening fire!');
                 this.resolveAttack(enemy, this.player, this.weapons[Weapon.LASER]);
             }
         });
-        this.endPhase(); // End AI movement phase
-        this.endPhase(); // End AI shooting phase
+        // End AI phases sequentially:
+        this.endPhase(); // e.g., end movement/shooting phase
+        this.endPhase(); // proceed through critical/boarding phases as needed
     }
 
     drawGrid() {
         this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
-
-        // Draw grid
         this.ctx.strokeStyle = '#333';
         this.ctx.lineWidth = 1;
 
@@ -230,7 +249,7 @@ class Game {
     draw() {
         this.drawGrid();
 
-        // Draw selection highlight
+        // Draw selection highlight for the selected ship
         if (this.selectedShip) {
             this.ctx.strokeStyle = '#0f0';
             this.ctx.lineWidth = 2;
@@ -248,23 +267,20 @@ class Game {
 
     updateUI() {
         document.getElementById('phaseInfo').textContent =
-            `Phase: ${this.currentPhase} - ${this.currentPlayer}'s turn`;
+            `Phase: ${this.currentPhase()} - ${this.currentPlayer}'s turn`;
         document.getElementById('hullBar').style.width = `${this.player.hull}%`;
         document.getElementById('shieldBar').style.width = `${this.player.shield}%`;
     }
 
     openShipCustomization(modal, canvas, ctx) {
-        // Set current values
+        // Set current customization values for preview
         document.getElementById('shipColorPicker').value = this.player.color;
         document.getElementById('hullType').value = this.player.hullType;
         document.getElementById('shieldCapacity').value = this.player.maxShield;
         document.getElementById('shieldRegen').value = this.player.shieldRegenRate;
         document.getElementById('macroBatteries').value = this.weapons[Weapon.LASER].damage;
         document.getElementById('torpedoPower').value = this.weapons[Weapon.TORPEDO].damage;
-
-        // Draw initial preview
         this.updateShipPreview(ctx, canvas.width, canvas.height);
-
         modal.show();
     }
 
@@ -274,7 +290,6 @@ class Game {
         previewShip.hullType = document.getElementById('hullType').value;
         previewShip.maxShield = parseInt(document.getElementById('shieldCapacity').value);
         previewShip.shieldRegenRate = parseInt(document.getElementById('shieldRegen').value);
-
         previewShip.drawPreview(ctx, width, height);
     }
 
@@ -288,17 +303,11 @@ class Game {
             torpedoPower: parseInt(document.getElementById('torpedoPower').value)
         };
 
-        // Update player ship
         this.player.updateCustomization(config);
-
-        // Update weapons
         this.weapons[Weapon.LASER].damage = config.macroBatteries;
         this.weapons[Weapon.TORPEDO].damage = config.torpedoPower;
-
         this.logMessage('system', 'Ship customization complete. New configuration applied.');
         modal.hide();
-
-        // Redraw game
         this.draw();
         this.updateUI();
     }
