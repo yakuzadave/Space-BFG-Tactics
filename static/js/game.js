@@ -4,23 +4,26 @@ class Game {
         this.ctx = this.canvas.getContext('2d');
         this.resizeCanvas();
 
-        this.player = new Ship(this.canvas.width/2, this.canvas.height/2, true);
+        this.gridSize = 50; // Size of each grid cell
+        this.currentPhase = 'movement'; // movement, shooting, end
+        this.currentPlayer = 'player'; // player or ai
+        this.selectedShip = null;
+
+        this.player = new Ship(this.gridSize * 5, this.gridSize * 5, true);
         this.enemies = [
-            new Ship(100, 100),
-            new Ship(this.canvas.width-100, 100)
+            new Ship(this.gridSize * 2, this.gridSize * 2),
+            new Ship(this.gridSize * 8, this.gridSize * 2)
         ];
-        this.projectiles = [];
-        this.enemyAIs = this.enemies.map(enemy => new AI(enemy, this.player));
 
         this.weapons = {
-            [Weapon.LASER]: new Weapon(Weapon.LASER, 10, 15, 400),
-            [Weapon.TORPEDO]: new Weapon(Weapon.TORPEDO, 25, 8, 600)
+            [Weapon.LASER]: new Weapon(Weapon.LASER, 10, 6, 8), // range in grid cells
+            [Weapon.TORPEDO]: new Weapon(Weapon.TORPEDO, 25, 4, 12)
         };
         this.selectedWeapon = this.weapons[Weapon.LASER];
 
-        this.keys = {};
         this.setupEventListeners();
-        this.gameLoop();
+        this.drawGrid();
+        this.updateUI();
     }
 
     resizeCanvas() {
@@ -29,12 +32,16 @@ class Game {
     }
 
     setupEventListeners() {
-        window.addEventListener('keydown', (e) => this.keys[e.key] = true);
-        window.addEventListener('keydown', (e) => {
-            if (e.key === ' ') this.fireWeapon();
+        this.canvas.addEventListener('click', (e) => {
+            const rect = this.canvas.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+            this.handleGridClick(x, y);
         });
-        window.addEventListener('keyup', (e) => this.keys[e.key] = false);
-        window.addEventListener('resize', () => this.resizeCanvas());
+
+        document.getElementById('endPhaseBtn').addEventListener('click', () => {
+            this.endPhase();
+        });
 
         document.getElementById('laserBtn').addEventListener('click', () => {
             this.selectedWeapon = this.weapons[Weapon.LASER];
@@ -44,61 +51,138 @@ class Game {
         });
     }
 
-    fireWeapon() {
-        this.projectiles.push(new Projectile(
-            this.player.x + Math.cos(this.player.angle) * 20,
-            this.player.y + Math.sin(this.player.angle) * 20,
-            this.player.angle,
-            this.selectedWeapon
-        ));
-    }
+    handleGridClick(x, y) {
+        const gridX = Math.floor(x / this.gridSize) * this.gridSize;
+        const gridY = Math.floor(y / this.gridSize) * this.gridSize;
 
-    update() {
-        // Player controls
-        if (this.keys['ArrowLeft']) this.player.angle -= 0.05;
-        if (this.keys['ArrowRight']) this.player.angle += 0.05;
-        if (this.keys['ArrowUp']) {
-            Physics.accelerate(this.player, this.player.angle, 0.2);
+        if (this.currentPhase === 'movement') {
+            // Handle ship selection and movement
+            const clickedShip = [this.player, ...this.enemies].find(ship => 
+                Math.abs(ship.x - x) < this.gridSize && Math.abs(ship.y - y) < this.gridSize
+            );
+
+            if (clickedShip && clickedShip.isPlayer && this.currentPlayer === 'player') {
+                this.selectedShip = clickedShip;
+            } else if (this.selectedShip && this.isValidMove(gridX, gridY)) {
+                this.selectedShip.x = gridX;
+                this.selectedShip.y = gridY;
+                this.selectedShip = null;
+            }
+        } else if (this.currentPhase === 'shooting') {
+            // Handle targeting
+            const target = this.enemies.find(enemy => 
+                Math.abs(enemy.x - x) < this.gridSize && Math.abs(enemy.y - y) < this.gridSize
+            );
+            if (target && this.isInRange(this.player, target, this.selectedWeapon.range)) {
+                this.resolveAttack(this.player, target, this.selectedWeapon);
+            }
         }
 
-        // Update all game objects
-        this.player.update();
-        this.enemies.forEach(enemy => enemy.update());
-        this.enemyAIs.forEach(ai => ai.update());
-        
-        // Update projectiles and check collisions
-        this.projectiles = this.projectiles.filter(projectile => {
-            projectile.update();
-            
-            // Check collision with enemies
-            this.enemies.forEach(enemy => {
-                if (Physics.checkCollision(projectile, enemy)) {
-                    enemy.damage(projectile.weapon.damage);
-                    return false;
-                }
-            });
+        this.draw();
+        this.updateUI();
+    }
 
-            // Remove if out of range
-            return projectile.distance < projectile.weapon.range;
+    isValidMove(x, y) {
+        // Check if the new position is within movement range (3 grid cells)
+        const dx = Math.abs(x - this.selectedShip.x) / this.gridSize;
+        const dy = Math.abs(y - this.selectedShip.y) / this.gridSize;
+        return dx + dy <= 3; // Manhattan distance for simplicity
+    }
+
+    isInRange(attacker, target, range) {
+        const dx = Math.abs(target.x - attacker.x) / this.gridSize;
+        const dy = Math.abs(target.y - attacker.y) / this.gridSize;
+        return Math.sqrt(dx * dx + dy * dy) <= range;
+    }
+
+    resolveAttack(attacker, target, weapon) {
+        target.damage(weapon.damage);
+        if (target.hull <= 0) {
+            this.enemies = this.enemies.filter(e => e !== target);
+        }
+    }
+
+    endPhase() {
+        if (this.currentPhase === 'movement') {
+            this.currentPhase = 'shooting';
+        } else if (this.currentPhase === 'shooting') {
+            if (this.currentPlayer === 'player') {
+                this.currentPlayer = 'ai';
+                this.currentPhase = 'movement';
+                this.aiTurn();
+            } else {
+                this.currentPlayer = 'player';
+                this.currentPhase = 'movement';
+            }
+        }
+        this.selectedShip = null;
+        this.updateUI();
+    }
+
+    aiTurn() {
+        // Simple AI: Move towards player and shoot if in range
+        this.enemies.forEach(enemy => {
+            // Move closer to player
+            const dx = this.player.x - enemy.x;
+            const dy = this.player.y - enemy.y;
+            enemy.x += Math.sign(dx) * this.gridSize;
+            enemy.y += Math.sign(dy) * this.gridSize;
+
+            // Shoot if in range
+            if (this.isInRange(enemy, this.player, this.weapons[Weapon.LASER].range)) {
+                this.resolveAttack(enemy, this.player, this.weapons[Weapon.LASER]);
+            }
         });
+        this.endPhase(); // End AI movement phase
+        this.endPhase(); // End AI shooting phase
+    }
 
-        // Update UI
-        document.getElementById('hullBar').style.width = `${this.player.hull}%`;
-        document.getElementById('shieldBar').style.width = `${this.player.shield}%`;
+    drawGrid() {
+        this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+
+        // Draw grid
+        this.ctx.strokeStyle = '#333';
+        this.ctx.lineWidth = 1;
+
+        for (let x = 0; x < this.canvas.width; x += this.gridSize) {
+            this.ctx.beginPath();
+            this.ctx.moveTo(x, 0);
+            this.ctx.lineTo(x, this.canvas.height);
+            this.ctx.stroke();
+        }
+
+        for (let y = 0; y < this.canvas.height; y += this.gridSize) {
+            this.ctx.beginPath();
+            this.ctx.moveTo(0, y);
+            this.ctx.lineTo(this.canvas.width, y);
+            this.ctx.stroke();
+        }
     }
 
     draw() {
-        this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
-        
+        this.drawGrid();
+
+        // Draw selection highlight
+        if (this.selectedShip) {
+            this.ctx.strokeStyle = '#0f0';
+            this.ctx.lineWidth = 2;
+            this.ctx.strokeRect(
+                this.selectedShip.x - this.gridSize/2,
+                this.selectedShip.y - this.gridSize/2,
+                this.gridSize,
+                this.gridSize
+            );
+        }
+
         this.player.draw(this.ctx);
         this.enemies.forEach(enemy => enemy.draw(this.ctx));
-        this.projectiles.forEach(projectile => projectile.draw(this.ctx));
     }
 
-    gameLoop() {
-        this.update();
-        this.draw();
-        requestAnimationFrame(() => this.gameLoop());
+    updateUI() {
+        document.getElementById('phaseInfo').textContent = 
+            `Phase: ${this.currentPhase} - ${this.currentPlayer}'s turn`;
+        document.getElementById('hullBar').style.width = `${this.player.hull}%`;
+        document.getElementById('shieldBar').style.width = `${this.player.shield}%`;
     }
 }
 

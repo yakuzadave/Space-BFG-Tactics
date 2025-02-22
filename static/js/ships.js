@@ -3,20 +3,19 @@ class Ship {
         this.x = x;
         this.y = y;
         this.angle = 0;
-        this.velocity = { x: 0, y: 0 };
-        this.radius = 20;
         this.isPlayer = isPlayer;
+        this.radius = 20;
         this.hull = 100;
         this.shield = 100;
-        this.shieldRegenRate = 0.1;
+        this.shieldRegenRate = 5; // Regenerate 5 points per turn
     }
 
     draw(ctx) {
         ctx.save();
         ctx.translate(this.x, this.y);
         ctx.rotate(this.angle);
-        
-        // Draw ship
+
+        // Draw ship using SVG-like path
         ctx.beginPath();
         ctx.moveTo(20, 0);
         ctx.lineTo(-10, -10);
@@ -36,13 +35,6 @@ class Ship {
         ctx.restore();
     }
 
-    update() {
-        Physics.applyInertia(this);
-        if (this.shield < 100) {
-            this.shield = Math.min(100, this.shield + this.shieldRegenRate);
-        }
-    }
-
     damage(amount) {
         if (this.shield > 0) {
             this.shield -= amount;
@@ -52,6 +44,12 @@ class Ship {
             }
         } else {
             this.hull -= amount;
+        }
+    }
+
+    regenerateShields() {
+        if (this.shield < 100) {
+            this.shield = Math.min(100, this.shield + this.shieldRegenRate);
         }
     }
 }

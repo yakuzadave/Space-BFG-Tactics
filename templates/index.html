@@ -11,6 +11,12 @@
     <div class="container-fluid">
         <div class="row my-3">
             <div class="col-md-9">
+                <div class="card mb-3">
+                    <div class="card-body d-flex justify-content-between align-items-center">
+                        <h5 id="phaseInfo" class="card-title mb-0">Phase: Movement - Player's turn</h5>
+                        <button id="endPhaseBtn" class="btn btn-primary">End Phase</button>
+                    </div>
+                </div>
                 <canvas id="gameCanvas"></canvas>
             </div>
             <div class="col-md-3">
@@ -32,8 +38,8 @@
                         <div class="mb-3">
                             <label>Weapon System</label>
                             <div class="btn-group w-100">
-                                <button id="laserBtn" class="btn btn-secondary active">Lasers</button>
-                                <button id="torpedoBtn" class="btn btn-secondary">Torpedoes</button>
+                                <button id="laserBtn" class="btn btn-secondary active">Macro Batteries</button>
+                                <button id="torpedoBtn" class="btn btn-secondary">Torpedo</button>
                             </div>
                         </div>
                     </div>
@@ -45,7 +51,6 @@
     <script src="{{ url_for('static', filename='js/physics.js') }}"></script>
     <script src="{{ url_for('static', filename='js/ships.js') }}"></script>
     <script src="{{ url_for('static', filename='js/weapons.js') }}"></script>
-    <script src="{{ url_for('static', filename='js/ai.js') }}"></script>
     <script src="{{ url_for('static', filename='js/game.js') }}"></script>
 </body>
 </html>
