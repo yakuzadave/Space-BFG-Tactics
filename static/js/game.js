@@ -57,10 +57,35 @@ class Game {
             this.selectedWeapon = this.weapons[Weapon.LASER];
             this.logMessage('system', 'Macro batteries armed and ready.');
         });
+
         document.getElementById('torpedoBtn').addEventListener('click', () => {
             this.selectedWeapon = this.weapons[Weapon.TORPEDO];
             this.logMessage('system', 'Torpedo tubes loaded and ready to fire.');
         });
+
+        // Ship customization
+        const customizeBtn = document.getElementById('customizeShipBtn');
+        const modal = new bootstrap.Modal(document.getElementById('shipCustomizationModal'));
+        const previewCanvas = document.getElementById('shipPreviewCanvas');
+        const previewCtx = previewCanvas.getContext('2d');
+
+        customizeBtn.addEventListener('click', () => {
+            this.openShipCustomization(modal, previewCanvas, previewCtx);
+        });
+
+        document.getElementById('saveShipBtn').addEventListener('click', () => {
+            this.saveShipCustomization(modal);
+        });
+
+        // Update preview when customization changes
+        const updatePreview = () => this.updateShipPreview(previewCtx, previewCanvas.width, previewCanvas.height);
+
+        document.getElementById('shipColorPicker').addEventListener('input', updatePreview);
+        document.getElementById('hullType').addEventListener('change', updatePreview);
+        document.getElementById('shieldCapacity').addEventListener('input', updatePreview);
+        document.getElementById('shieldRegen').addEventListener('input', updatePreview);
+        document.getElementById('macroBatteries').addEventListener('input', updatePreview);
+        document.getElementById('torpedoPower').addEventListener('input', updatePreview);
     }
 
     handleGridClick(x, y) {
@@ -69,7 +94,7 @@ class Game {
 
         if (this.currentPhase === 'movement') {
             // Handle ship selection and movement
-            const clickedShip = [this.player, ...this.enemies].find(ship => 
+            const clickedShip = [this.player, ...this.enemies].find(ship =>
                 Math.abs(ship.x - x) < this.gridSize && Math.abs(ship.y - y) < this.gridSize
             );
 
@@ -82,11 +107,11 @@ class Game {
                 this.selectedShip.x = gridX;
                 this.selectedShip.y = gridY;
                 this.selectedShip = null;
-                this.logMessage('system', `Ship moved from grid (${Math.floor(oldX/this.gridSize)},${Math.floor(oldY/this.gridSize)}) to (${Math.floor(gridX/this.gridSize)},${Math.floor(gridY/this.gridSize)})`);
+                this.logMessage('system', `Ship moved from grid (${Math.floor(oldX / this.gridSize)},${Math.floor(oldY / this.gridSize)}) to (${Math.floor(gridX / this.gridSize)},${Math.floor(gridY / this.gridSize)})`);
             }
         } else if (this.currentPhase === 'shooting') {
             // Handle targeting
-            const target = this.enemies.find(enemy => 
+            const target = this.enemies.find(enemy =>
                 Math.abs(enemy.x - x) < this.gridSize && Math.abs(enemy.y - y) < this.gridSize
             );
             if (target && this.isInRange(this.player, target, this.selectedWeapon.range)) {
@@ -117,7 +142,7 @@ class Game {
         target.damage(weapon.damage);
 
         if (oldShield > 0) {
-            this.logMessage('shield', 
+            this.logMessage('shield',
                 `${weapon.type === Weapon.LASER ? 'Macro batteries' : 'Torpedo'} hit enemy shields! ` +
                 `Shield strength reduced from ${oldShield.toFixed(0)}% to ${target.shield.toFixed(0)}%`
             );
@@ -165,9 +190,9 @@ class Game {
             enemy.x += Math.sign(dx) * this.gridSize;
             enemy.y += Math.sign(dy) * this.gridSize;
 
-            this.logMessage('system', 
-                `Enemy vessel moved from grid (${Math.floor(oldX/this.gridSize)},${Math.floor(oldY/this.gridSize)}) ` +
-                `to (${Math.floor(enemy.x/this.gridSize)},${Math.floor(enemy.y/this.gridSize)})`
+            this.logMessage('system',
+                `Enemy vessel moved from grid (${Math.floor(oldX / this.gridSize)},${Math.floor(oldY / this.gridSize)}) ` +
+                `to (${Math.floor(enemy.x / this.gridSize)},${Math.floor(enemy.y / this.gridSize)})`
             );
 
             // Shoot if in range
@@ -210,8 +235,8 @@ class Game {
             this.ctx.strokeStyle = '#0f0';
             this.ctx.lineWidth = 2;
             this.ctx.strokeRect(
-                this.selectedShip.x - this.gridSize/2,
-                this.selectedShip.y - this.gridSize/2,
+                this.selectedShip.x - this.gridSize / 2,
+                this.selectedShip.y - this.gridSize / 2,
                 this.gridSize,
                 this.gridSize
             );
@@ -222,10 +247,60 @@ class Game {
     }
 
     updateUI() {
-        document.getElementById('phaseInfo').textContent = 
+        document.getElementById('phaseInfo').textContent =
             `Phase: ${this.currentPhase} - ${this.currentPlayer}'s turn`;
         document.getElementById('hullBar').style.width = `${this.player.hull}%`;
         document.getElementById('shieldBar').style.width = `${this.player.shield}%`;
+    }
+
+    openShipCustomization(modal, canvas, ctx) {
+        // Set current values
+        document.getElementById('shipColorPicker').value = this.player.color;
+        document.getElementById('hullType').value = this.player.hullType;
+        document.getElementById('shieldCapacity').value = this.player.maxShield;
+        document.getElementById('shieldRegen').value = this.player.shieldRegenRate;
+        document.getElementById('macroBatteries').value = this.weapons[Weapon.LASER].damage;
+        document.getElementById('torpedoPower').value = this.weapons[Weapon.TORPEDO].damage;
+
+        // Draw initial preview
+        this.updateShipPreview(ctx, canvas.width, canvas.height);
+
+        modal.show();
+    }
+
+    updateShipPreview(ctx, width, height) {
+        const previewShip = new Ship(0, 0, true);
+        previewShip.color = document.getElementById('shipColorPicker').value;
+        previewShip.hullType = document.getElementById('hullType').value;
+        previewShip.maxShield = parseInt(document.getElementById('shieldCapacity').value);
+        previewShip.shieldRegenRate = parseInt(document.getElementById('shieldRegen').value);
+
+        previewShip.drawPreview(ctx, width, height);
+    }
+
+    saveShipCustomization(modal) {
+        const config = {
+            color: document.getElementById('shipColorPicker').value,
+            hullType: document.getElementById('hullType').value,
+            shieldCapacity: parseInt(document.getElementById('shieldCapacity').value),
+            shieldRegen: parseInt(document.getElementById('shieldRegen').value),
+            macroBatteries: parseInt(document.getElementById('macroBatteries').value),
+            torpedoPower: parseInt(document.getElementById('torpedoPower').value)
+        };
+
+        // Update player ship
+        this.player.updateCustomization(config);
+
+        // Update weapons
+        this.weapons[Weapon.LASER].damage = config.macroBatteries;
+        this.weapons[Weapon.TORPEDO].damage = config.torpedoPower;
+
+        this.logMessage('system', 'Ship customization complete. New configuration applied.');
+        modal.hide();
+
+        // Redraw game
+        this.draw();
+        this.updateUI();
     }
 }
 
